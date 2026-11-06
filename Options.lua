@@ -93,7 +93,10 @@ local function Register()
 	local function Setting(key, varType, label)
 		local setting = Settings.RegisterAddOnSetting(category, "COOLDOWNMOUSE_" .. key, key, ns.settings,
 			varType, label, ns.defaults[key])
-		setting:SetValueChangedCallback(function() ns.Apply() end)
+		setting:SetValueChangedCallback(function()
+			ns.Apply()
+			if key == "shape" then ns.RefreshShown() end
+		end)
 		registered[key] = setting
 		return setting
 	end
@@ -105,7 +108,7 @@ local function Register()
 	local function Slider(key, label, tooltip, min, max, step, fmt)
 		local options = Settings.CreateSliderOptions(min, max, step)
 		options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, fmt)
-		Settings.CreateSlider(category, Setting(key, Settings.VarType.Number, label), options, tooltip)
+		return Settings.CreateSlider(category, Setting(key, Settings.VarType.Number, label), options, tooltip)
 	end
 
 	local function Dropdown(key, label, tooltip, list)
@@ -114,7 +117,7 @@ local function Register()
 			for _, o in ipairs(list) do c:Add(o[1], o[2]) end
 			return c:GetData()
 		end
-		Settings.CreateDropdown(category, Setting(key, Settings.VarType.String, label), Options, tooltip)
+		return Settings.CreateDropdown(category, Setting(key, Settings.VarType.String, label), Options, tooltip)
 	end
 
 	local function ColorButton(key, tooltip)
@@ -127,7 +130,20 @@ local function Register()
 	Checkbox("enabled", "Enabled", "Show the cursor rings.")
 
 	Header("Highlight ring")
-	Dropdown("shape", "Shape", "Shape of both rings.", SHAPES)
+	local shapeInit = Dropdown("shape", "Shape", "Shape of both rings.", SHAPES)
+	local lengthInit = Slider("penisLength", "How long are you?",
+		"Stretches the shaft from the balls to the tip. The thickness stays the same.", 1, 12, 0.5,
+		function(v) return string.format('%.1f"', v) end)
+	-- Only show "How long are you?" while the penis shape is picked.
+	local function IsPenis() return ns.settings.shape == "penis" end
+	if lengthInit then
+		if lengthInit.SetParentInitializer and shapeInit then
+			lengthInit:SetParentInitializer(shapeInit, IsPenis)
+		end
+		if lengthInit.AddShownPredicate then
+			lengthInit:AddShownPredicate(IsPenis)
+		end
+	end
 	Slider("size", "Size", "How wide the highlight ring is.", 8, 160, 1, num)
 	Slider("thickness", "Thickness", "How thick the highlight ring's line is.", 1, 10, 0.5,
 		function(v) return string.format("%.1f", v) end)
@@ -166,6 +182,22 @@ local function Register()
 	end, "Put every setting, including colors, back to the defaults.")
 
 	Settings.RegisterAddOnCategory(category)
+end
+
+-- Show or hide rows that depend on another setting (the length slider under Shape).
+function ns.RefreshShown()
+	if not (SettingsPanel and SettingsPanel:IsShown() and SettingsPanel.GetSettingsList) then return end
+	local list = SettingsPanel:GetSettingsList()
+	if not list then return end
+	pcall(function()
+		if SettingsInbound and SettingsInbound.RepairDisplay then
+			SettingsInbound.RepairDisplay()
+		elseif list.ScrollBox and list.ScrollBox.ForEachFrame then
+			list.ScrollBox:ForEachFrame(function(frame)
+				if frame.EvaluateState then frame:EvaluateState() end
+			end)
+		end
+	end)
 end
 
 -- Push values changed from slash commands or Reset into the panel's controls.

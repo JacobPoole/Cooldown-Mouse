@@ -13,6 +13,7 @@ ns.defaults = {
 	thickness = 2,
 	alpha = 0.35,
 	combatOnly = false,    -- only show the highlight ring in combat
+	penisLength = 6,       -- "How long are you?" (1-12); only stretches the shaft of the penis shape
 	-- Timer ring
 	mode = "auto",         -- auto | melee | ranged | mana
 	placement = "outside", -- outside | inside | replace (timer ring takes over the highlight ring)
@@ -183,28 +184,30 @@ local function Heart()
 	return pts
 end
 
--- Shaft with a rounded head on top and two balls at the bottom; the cursor sits mid-shaft.
-local function Penis(x, y)
-	if math.abs(x) <= 0.26 and y >= -0.4 and y <= 0.7 then return true end
-	if x * x + (y - 0.7) ^ 2 <= 0.33 ^ 2 then return true end
-	if (x - 0.3) ^ 2 + (y + 0.55) ^ 2 <= 0.36 ^ 2 then return true end
-	if (x + 0.3) ^ 2 + (y + 0.55) ^ 2 <= 0.36 ^ 2 then return true end
-	return false
+-- Penis: an ordered outline (clockwise from the tip) instead of a distance per angle, so it
+-- can curve in where the shaft meets the balls. `length` (1-12) only stretches the shaft.
+local function Arc(pts, cx, cy, r, from, to)
+	-- from/to in degrees, counter-clockwise from 3 o'clock; points every ~6 degrees
+	local steps = math.max(1, math.ceil(math.abs(to - from) / 6))
+	for k = 0, steps do
+		local a = math.rad(from + (to - from) * k / steps)
+		pts[#pts + 1] = { cx + r * math.cos(a), cy + r * math.sin(a) }
+	end
 end
 
--- For shapes given as an "is this point inside?" test: walk in from outside along each
--- angle until we hit the shape, and use that as the outline.
-local function Traced(inside, steps)
+local function PenisPath(length)
+	local shaft, head = 0.24, 0.30         -- shaft half-width, head radius (a little wider: the flare)
+	local ball, bx, by = 0.36, 0.30, -0.55 -- ball radius and centre of the right ball
+	local top = 0.1 * length               -- centre of the head; the shaft's base sits inside the balls
+	local flare = math.deg(math.acos(shaft / head))
+	local join = math.deg(math.atan2(math.sqrt(ball ^ 2 - (bx - shaft) ^ 2), shaft - bx))
+	local cleft = math.deg(math.atan2(-math.sqrt(ball ^ 2 - bx ^ 2), -bx))
 	local pts = {}
-	for k = 0, steps - 1 do
-		local a = TAU * k / steps
-		local sx, sy = math.sin(a), math.cos(a)
-		local r = 1.6
-		while r > 0.01 and not inside(sx * r, sy * r) do
-			r = r - 0.004
-		end
-		pts[#pts + 1] = { sx * r, sy * r }
-	end
+	Arc(pts, 0, top, head, 90, -flare)                         -- head, right half
+	Arc(pts, bx, by, ball, join, cleft)                        -- down the shaft, round the right ball
+	Arc(pts, -bx, by, ball, -180 - cleft, 180 - join - 360)    -- round the left ball, back to the shaft
+	Arc(pts, 0, top, head, 180 + flare, 90)                    -- up the shaft, head, left half
+	pts[#pts] = nil -- last point repeats the first
 	return pts
 end
 
@@ -231,8 +234,13 @@ local SHAPES = {
 	star     = Outline(Star(5, 0.45), 1.30),
 	cross    = Outline(Cross(0.34), 1.15),
 	heart    = Outline(Heart(), 1.15),
-	penis    = Outline(Traced(Penis, 120), 1.20),
 }
+-- Shapes drawn from an ordered outline. Unit outlines are scaled by ring radius * PATH_SCALE.
+local PATH_SCALE = 1.5
+local PATHS = {
+	penis = function() return PenisPath(ns.settings.penisLength or 6) end,
+}
+
 ns.SHAPE_NAMES = { "circle", "square", "diamond", "triangle", "hexagon", "octagon", "star", "cross", "heart", "penis" }
 
 -- Distance from the centre to the shape's outline at angle theta (1 = circle).
@@ -289,17 +297,64 @@ local function PieceCount(radius, shape)
 	return math.max(24, math.min(SEGMENTS, n))
 end
 
-local function LayoutRing(ring, radius, thickness, shape, clockwise)
-	local dir = clockwise and 1 or -1
-	local n = PieceCount(radius, shape)
-	ring.n = n
-	for i = 0, n do
-		local theta = dir * TAU * i / n
-		local r = radius * ShapeRadius(shape, theta)
-		local pt = ring.pts[i] or {}
-		pt.x, pt.y = math.sin(theta) * r, math.cos(theta) * r
-		ring.pts[i] = pt
+-- Fill pts[0..n] for a path shape: scale it, push it out (or in) by `offset` along the outline's
+-- normals, then space n points evenly along it, starting at the top. Returns n.
+local function PathPoints(out, shape, radius, offset, clockwise)
+	local dense = PATHS[shape]()
+	local k = radius * PATH_SCALE
+	local m = #dense
+	local pts = {}
+	for i = 1, m do
+		local prev, nxt = dense[(i - 2) % m + 1], dense[i % m + 1]
+		local tx, ty = nxt[1] - prev[1], nxt[2] - prev[2]
+		local len = math.sqrt(tx * tx + ty * ty)
+		if len == 0 then len = 1 end
+		local nx, ny = -ty / len, tx / len -- outward, since the outline runs clockwise
+		pts[i] = { dense[i][1] * k + nx * offset, dense[i][2] * k + ny * offset }
 	end
+	pts[m + 1] = pts[1]
+
+	local dist = { [1] = 0 }
+	for i = 2, m + 1 do
+		dist[i] = dist[i - 1] + math.sqrt((pts[i][1] - pts[i - 1][1]) ^ 2 + (pts[i][2] - pts[i - 1][2]) ^ 2)
+	end
+	local total = dist[m + 1]
+	local n = math.max(24, math.min(SEGMENTS, math.floor(total / MIN_PIECE)))
+
+	local j = 2
+	for i = 0, n do
+		local s = total * i / n
+		if not clockwise then s = total - s end
+		if s <= 0 then j = 2 elseif s < dist[j - 1] then j = 2 end
+		while j < m + 1 and dist[j] < s do j = j + 1 end
+		local a, b = pts[j - 1], pts[j]
+		local seg = dist[j] - dist[j - 1]
+		local f = seg > 0 and (s - dist[j - 1]) / seg or 0
+		local pt = out[i] or {}
+		pt.x, pt.y = a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f
+		out[i] = pt
+	end
+	return n
+end
+
+local function LayoutRing(ring, radius, thickness, shape, clockwise, offset)
+	offset = offset or 0
+	local n
+	if PATHS[shape] then
+		n = PathPoints(ring.pts, shape, radius, offset, clockwise)
+	else
+		radius = math.max(2, radius + offset)
+		local dir = clockwise and 1 or -1
+		n = PieceCount(radius, shape)
+		for i = 0, n do
+			local theta = dir * TAU * i / n
+			local r = radius * ShapeRadius(shape, theta)
+			local pt = ring.pts[i] or {}
+			pt.x, pt.y = math.sin(theta) * r, math.cos(theta) * r
+			ring.pts[i] = pt
+		end
+	end
+	ring.n = n
 	for i = 1, n do
 		local line, a, b = ring.lines[i], ring.pts[i - 1], ring.pts[i]
 		line:SetThickness(thickness)
@@ -366,13 +421,12 @@ function ns.Apply()
 	LayoutRing(highlight, half, s.thickness, s.shape, s.direction ~= "ccw")
 
 	local offset = s.gap + (s.thickness + s.timerThickness) / 2
-	local timerRadius = half
-	if s.placement == "outside" then
-		timerRadius = half + offset
-	elseif s.placement == "inside" then
-		timerRadius = math.max(2, half - offset)
+	if s.placement == "inside" then
+		offset = -offset
+	elseif s.placement ~= "outside" then
+		offset = 0
 	end
-	LayoutRing(timerRing, timerRadius, s.timerThickness, s.shape, s.direction ~= "ccw")
+	LayoutRing(timerRing, half, s.timerThickness, s.shape, s.direction ~= "ccw", offset)
 
 	TintRing(highlight, s.colors.highlight, s.alpha)
 	tintedKind = nil
@@ -681,6 +735,7 @@ local function Help()
 	print("  /mouse size <8-160> - highlight ring size (now " .. ns.settings.size .. ")")
 	print("  /mouse alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
 	print("  /mouse shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
+	print("  /mouse length <1-12> - penis shape length (now " .. ns.settings.penisLength .. ")")
 	print("  /mouse mode auto|melee|ranged|mana - what the timer ring tracks (now " .. ns.settings.mode .. ")")
 	print("  /mouse color highlight|melee|ranged|mana - pick a color")
 	print("  /mouse test - run a 3 second test timer")
@@ -711,6 +766,10 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 	elseif cmd == "shape" then
 		if rest == "circle" or SHAPES[rest] then s.shape = rest end
 		ns.Print("Shape:", s.shape)
+	elseif cmd == "length" then
+		local n = tonumber(rest)
+		if n then s.penisLength = math.max(1, math.min(12, n)) end
+		ns.Print("How long are you?", s.penisLength .. '"')
 	elseif cmd == "mode" then
 		if rest == "auto" or SINGLE[rest] then s.mode = rest end
 		ns.Print("Mode:", s.mode)
