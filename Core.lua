@@ -556,9 +556,9 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		lastMana = Safe(UnitPower("player", MANA))
 		lastMeleeSpeed = MeleeSpeed()
 		if ns.settings.enabled then
-			ns.Print("loaded. Type /cdm for settings.")
+			ns.Print("loaded. Type /mouse for settings.")
 		else
-			ns.Print("is turned off. Type /cdm toggle to turn it back on.")
+			ns.Print("is turned off. Type /mouse toggle to turn it back on.")
 		end
 	end
 end))
@@ -593,19 +593,19 @@ end
 
 local function Help()
 	ns.Print("v" .. ns.version .. " commands:")
-	print("  /cdm - open settings (colors, shape, sizes and more)")
-	print("  /cdm on|off|toggle - turn the addon on or off")
-	print("  /cdm size <8-160> - highlight ring size (now " .. ns.settings.size .. ")")
-	print("  /cdm alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
-	print("  /cdm shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
-	print("  /cdm mode auto|melee|ranged|mana - what the timer ring tracks (now " .. ns.settings.mode .. ")")
-	print("  /cdm color highlight|melee|ranged|mana - pick a color")
-	print("  /cdm test - run a 3 second test timer")
-	print("  /cdm debug - show what the addon sees")
-	print("  /cdm reset - restore default settings")
+	print("  /mouse - open settings (colors, shape, sizes and more)")
+	print("  /mouse on|off|toggle - turn the addon on or off")
+	print("  /mouse size <8-160> - highlight ring size (now " .. ns.settings.size .. ")")
+	print("  /mouse alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
+	print("  /mouse shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
+	print("  /mouse mode auto|melee|ranged|mana - what the timer ring tracks (now " .. ns.settings.mode .. ")")
+	print("  /mouse color highlight|melee|ranged|mana - pick a color")
+	print("  /mouse test - run a 3 second test timer")
+	print("  /mouse debug - show what the addon sees")
+	print("  /mouse reset - restore default settings")
 end
 
-SLASH_COOLDOWNMOUSE1 = "/cdm"
+SLASH_COOLDOWNMOUSE1 = "/mouse"
 SLASH_COOLDOWNMOUSE2 = "/cooldownmouse"
 SlashCmdList.COOLDOWNMOUSE = function(msg)
 	local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
@@ -635,7 +635,7 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 		if s.colors[rest] and ns.PickColor then
 			ns.PickColor(rest)
 		else
-			ns.Print("Use /cdm color highlight, melee, ranged or mana.")
+			ns.Print("Use /mouse color highlight, melee, ranged or mana.")
 		end
 		return
 	elseif cmd == "test" then

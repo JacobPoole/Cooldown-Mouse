@@ -19,11 +19,11 @@ A cursor highlight and swing timer for **World of Warcraft: Forever** (interface
 | Mage, Priest, Warlock | Mana rule, then wand. |
 | Druid, Shaman, Paladin | Melee while you're auto-attacking, otherwise the mana rule. |
 
-Change this with "Tracks" in settings or `/cdm mode`.
+Change this with "Tracks" in settings or `/mouse mode`.
 
 ## Settings
 
-Options > AddOns > Cooldown Mouse, or type `/cdm`.
+Options > AddOns > Cooldown Mouse, or type `/mouse`.
 
 - **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart), size, thickness, opacity, color, only in combat.
 - **Timer ring:** what it tracks, position (outside, inside, or on the highlight ring), style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
@@ -43,22 +43,22 @@ The folder must be named `Cooldown-Mouse` to match `Cooldown-Mouse.toc`.
 
 | Command | What it does |
 |---|---|
-| `/cdm` | Open settings |
-| `/cdm on\|off\|toggle` | Turn the addon on or off |
-| `/cdm size <8-160>` | Highlight ring size |
-| `/cdm alpha <0-1>` | Highlight ring opacity |
-| `/cdm shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross or heart |
-| `/cdm mode auto\|melee\|ranged\|mana` | What the timer ring tracks |
-| `/cdm color highlight\|melee\|ranged\|mana` | Pick a color |
-| `/cdm test` | Run a 3 second test timer |
-| `/cdm debug` | Show what the addon sees (class, mana, timers) |
-| `/cdm reset` | Restore default settings |
-| `/cdm help` | List commands |
+| `/mouse` | Open settings |
+| `/mouse on\|off\|toggle` | Turn the addon on or off |
+| `/mouse size <8-160>` | Highlight ring size |
+| `/mouse alpha <0-1>` | Highlight ring opacity |
+| `/mouse shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross or heart |
+| `/mouse mode auto\|melee\|ranged\|mana` | What the timer ring tracks |
+| `/mouse color highlight\|melee\|ranged\|mana` | Pick a color |
+| `/mouse test` | Run a 3 second test timer |
+| `/mouse debug` | Show what the addon sees (class, mana, timers) |
+| `/mouse reset` | Restore default settings |
+| `/mouse help` | List commands |
 
 ## Notes
 
 - WoW Forever keeps the combat log to the Blizzard UI, so the addon can't see your swings directly. Instead it watches hits and misses on your target (the numbers on the target portrait). A physical hit counts as your swing only if you're auto-attacking and your next swing is due (in the last quarter of the timer, or after it). So a groupmate's hits and your own attacks mid-swing don't reset it. In a group, another player's hit can still be mistaken for your swing while yours is due.
-- If the game hides those hit details too, the melee ring falls back to an estimate: it starts when you begin auto-attacking and repeats every weapon-speed seconds. `/cdm debug` shows which method is in use.
+- If the game hides those hit details too, the melee ring falls back to an estimate: it starts when you begin auto-attacking and repeats every weapon-speed seconds. `/mouse debug` shows which method is in use.
 - Only the main hand is tracked when dual-wielding.
 - The mana timer starts whenever your mana goes down or you cast a spell that costs mana, so effects that drain your mana also start it.
 

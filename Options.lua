@@ -183,7 +183,7 @@ function ns.SetupOptions()
 	local ok, err = pcall(Register)
 	if not ok then
 		category = nil
-		ns.Print("Settings panel unavailable (" .. tostring(err) .. "). Type /cdm help for slash commands.")
+		ns.Print("Settings panel unavailable (" .. tostring(err) .. "). Type /mouse help for slash commands.")
 	end
 end
 
@@ -191,7 +191,7 @@ function ns.OpenOptions()
 	if category and Settings.OpenToCategory then
 		Settings.OpenToCategory(category:GetID())
 	else
-		ns.Print("Settings panel unavailable. Type /cdm help for slash commands.")
+		ns.Print("Settings panel unavailable. Type /mouse help for slash commands.")
 	end
 end
 
