@@ -31,7 +31,7 @@ ns.defaults = {
 }
 
 local MANA_RULE = 5   -- seconds without spending mana before spirit regen kicks in
-local SEGMENTS = 120  -- line pieces per ring (divisible by 3, 4, 6 and 8 so polygon corners line up)
+local SEGMENTS = 120  -- most line pieces per ring; small rings use fewer (see PieceCount)
 local FLASH_TIME = 0.7
 local RANGED_SPELLS = {
 	[75] = true,    -- Auto Shot
@@ -263,7 +263,7 @@ holder:EnableMouse(false)
 holder:SetSize(1, 1)
 
 local function NewRing(sublevel)
-	local ring = { lines = {}, pts = {}, shown = true }
+	local ring = { lines = {}, pts = {}, n = SEGMENTS, shown = true }
 	for i = 1, SEGMENTS do
 		local line = holder:CreateLine(nil, "OVERLAY", nil, sublevel)
 		line:SetColorTexture(1, 1, 1, 1)
@@ -272,26 +272,48 @@ local function NewRing(sublevel)
 	return ring
 end
 
+-- The game skips lines shorter than about a pixel, so small rings use fewer, longer pieces.
+-- Piece counts are multiples of 24 so square, triangle, hexagon and octagon corners line up.
+local MIN_PIECE = 3
+local function PieceCount(radius, shape)
+	local perimeter = 0
+	local px, py
+	for i = 0, 96 do
+		local theta = TAU * i / 96
+		local r = radius * ShapeRadius(shape, theta)
+		local x, y = math.sin(theta) * r, math.cos(theta) * r
+		if px then perimeter = perimeter + math.sqrt((x - px) ^ 2 + (y - py) ^ 2) end
+		px, py = x, y
+	end
+	local n = math.floor(perimeter / MIN_PIECE / 24) * 24
+	return math.max(24, math.min(SEGMENTS, n))
+end
+
 local function LayoutRing(ring, radius, thickness, shape, clockwise)
 	local dir = clockwise and 1 or -1
-	for i = 0, SEGMENTS do
-		local theta = dir * 2 * math.pi * i / SEGMENTS
+	local n = PieceCount(radius, shape)
+	ring.n = n
+	for i = 0, n do
+		local theta = dir * TAU * i / n
 		local r = radius * ShapeRadius(shape, theta)
 		local pt = ring.pts[i] or {}
 		pt.x, pt.y = math.sin(theta) * r, math.cos(theta) * r
 		ring.pts[i] = pt
 	end
-	for i = 1, SEGMENTS do
+	for i = 1, n do
 		local line, a, b = ring.lines[i], ring.pts[i - 1], ring.pts[i]
 		line:SetThickness(thickness)
 		line:SetStartPoint("CENTER", holder, a.x, a.y)
 		line:SetEndPoint("CENTER", holder, b.x, b.y)
 	end
+	for i = n + 1, SEGMENTS do
+		ring.lines[i]:Hide()
+	end
 	ring.cut = nil
 end
 
 local function TintRing(ring, c, a)
-	for i = 1, SEGMENTS do
+	for i = 1, ring.n do
 		ring.lines[i]:SetVertexColor(c.r, c.g, c.b, a)
 	end
 end
@@ -299,7 +321,7 @@ end
 -- Put back the piece that was trimmed to show a partial segment.
 local function RestoreCut(ring)
 	local i = ring.cut
-	if i and i >= 1 and i <= SEGMENTS then
+	if i and i >= 1 and i <= ring.n then
 		local a = ring.pts[i - 1]
 		ring.lines[i]:SetStartPoint("CENTER", holder, a.x, a.y)
 	end
@@ -308,7 +330,7 @@ end
 
 local function ShowRing(ring, shown)
 	RestoreCut(ring)
-	for i = 1, SEGMENTS do
+	for i = 1, ring.n do
 		ring.lines[i]:SetShown(shown)
 	end
 	ring.shown = shown
@@ -316,18 +338,19 @@ end
 
 -- Erase the first `p` (0-1) of the ring, starting at 12 o'clock.
 local function SweepRing(ring, p)
-	local f = p * SEGMENTS
+	local n = ring.n
+	local f = p * n
 	local cut = math.floor(f) + 1 -- first piece still (partly) visible
 	if cut ~= ring.cut then
 		RestoreCut(ring)
-		for i = 1, SEGMENTS do
+		for i = 1, n do
 			ring.lines[i]:SetShown(i >= cut)
 		end
 		ring.cut = cut
 	end
-	if cut <= SEGMENTS then
+	if cut <= n then
 		local a, b = ring.pts[cut - 1], ring.pts[cut]
-		local frac = f - (cut - 1)
+		local frac = math.min(f - (cut - 1), 0.8) -- keep the last sliver long enough to draw
 		ring.lines[cut]:SetStartPoint("CENTER", holder, a.x + (b.x - a.x) * frac, a.y + (b.y - a.y) * frac)
 	end
 	ring.shown = true
@@ -379,12 +402,30 @@ local function CostsMana(spellID)
 	elseif GetSpellPowerCost then
 		costs = GetSpellPowerCost(spellID)
 	end
-	if type(costs) ~= "table" then return false end
+	if type(costs) ~= "table" then return nil end
+	local known = false
 	for _, c in ipairs(costs) do
 		local kind, cost = Safe(c.type), Safe(c.cost)
-		if kind == MANA and cost and cost > 0 then return true end
+		if kind == nil or cost == nil then return nil end -- hidden by the game
+		known = true
+		if kind == MANA and cost > 0 then return true end
 	end
-	return false
+	return known and false or nil
+end
+
+-- Classes whose casts spend mana. Used when the game hides spell costs.
+local MANA_CLASSES = { MAGE = true, PRIEST = true, WARLOCK = true, DRUID = true, SHAMAN = true, PALADIN = true, HUNTER = true }
+local NOT_SPENDS = { [6603] = true } -- Auto Attack
+ns.lastCast = {}
+
+local function SpendsMana(spellID)
+	if RANGED_SPELLS[spellID] or NOT_SPENDS[spellID] then return false end
+	local ok, costs = pcall(CostsMana, spellID)
+	if ok and costs ~= nil then return costs end
+	-- Cost unknown: assume a mana user's cast spent mana (not in forms that use rage or energy).
+	if not MANA_CLASSES[playerClass] then return false end
+	local powerType = Safe((UnitPowerType("player")))
+	return powerType == nil or powerType == MANA
 end
 
 -------------------------------------------------------------------------------
@@ -517,8 +558,9 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		if RANGED_SPELLS[spellID] then
 			StartTimer("ranged", RangedSpeed())
 		end
-		local ok, mana = pcall(CostsMana, spellID)
-		if ok and mana then
+		local spends = SpendsMana(spellID)
+		ns.lastCast.id, ns.lastCast.spends = spellID, spends
+		if spends then
 			StartTimer("mana", MANA_RULE)
 		end
 
@@ -606,17 +648,21 @@ local function Debug()
 	ns.Print("debug:")
 	local hx, hy = holder:GetCenter()
 	local shownLines = 0
-	for i = 1, SEGMENTS do
+	for i = 1, highlight.n do
 		if highlight.lines[i]:IsShown() then shownLines = shownLines + 1 end
 	end
 	local c = ns.settings.colors.highlight
 	print("  enabled:", tostring(ns.settings.enabled), " frame visible:", tostring(holder:IsVisible()),
 		" at:", hx and string.format("%.0f, %.0f", hx, hy) or "nowhere")
-	print("  highlight ring:", shownLines .. "/" .. SEGMENTS .. " pieces shown,",
+	print("  highlight ring:", shownLines .. "/" .. highlight.n .. " pieces shown,",
 		"size", ns.settings.size, "thickness", ns.settings.thickness, "opacity", ns.settings.alpha,
 		string.format("color %.2f %.2f %.2f", c.r, c.g, c.b))
 	print("  class:", playerClass, " mode:", ns.settings.mode, " shows:", table.concat(ns.Priority(), " > "))
 	print("  mana now:", secret and "(hidden by the game)" or tostring(raw), " last seen:", tostring(lastMana))
+	local costOk, cost = false, nil
+	if ns.lastCast.id then costOk, cost = pcall(CostsMana, ns.lastCast.id) end
+	print("  last spell:", tostring(ns.lastCast.id), " spent mana:", tostring(ns.lastCast.spends),
+		" cost info:", not costOk and "n/a" or (cost == nil and "hidden by the game" or tostring(cost)))
 	print("  swing detection:", hitsVisible and "from hits on your target" or "estimated (hit details hidden)")
 	print("  auto-attacking:", tostring(autoAttacking), " melee speed:", tostring(MeleeSpeed()),
 		" ranged speed:", tostring(RangedSpeed()))
