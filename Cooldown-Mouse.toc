@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: Cooldown Mouse
+## Notes: A ring around your cursor so you never lose it, plus a timer ring for your melee/ranged swing or the five-second mana rule.
+## Author: jpoole
+## Version: 0.1.0
+## SavedVariables: CooldownMouseDB
+## IconTexture: Interface\Icons\Spell_Nature_TimeStop
+## Category: Combat
+## AddonCompartmentFunc: CooldownMouse_OnAddonCompartmentClick
+
+Core.lua
+Options.lua
