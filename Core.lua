@@ -183,6 +183,31 @@ local function Heart()
 	return pts
 end
 
+-- Shaft with a rounded head on top and two balls at the bottom; the cursor sits mid-shaft.
+local function Penis(x, y)
+	if math.abs(x) <= 0.26 and y >= -0.4 and y <= 0.7 then return true end
+	if x * x + (y - 0.7) ^ 2 <= 0.33 ^ 2 then return true end
+	if (x - 0.3) ^ 2 + (y + 0.55) ^ 2 <= 0.36 ^ 2 then return true end
+	if (x + 0.3) ^ 2 + (y + 0.55) ^ 2 <= 0.36 ^ 2 then return true end
+	return false
+end
+
+-- For shapes given as an "is this point inside?" test: walk in from outside along each
+-- angle until we hit the shape, and use that as the outline.
+local function Traced(inside, steps)
+	local pts = {}
+	for k = 0, steps - 1 do
+		local a = TAU * k / steps
+		local sx, sy = math.sin(a), math.cos(a)
+		local r = 1.6
+		while r > 0.01 and not inside(sx * r, sy * r) do
+			r = r - 0.004
+		end
+		pts[#pts + 1] = { sx * r, sy * r }
+	end
+	return pts
+end
+
 -- Turn an outline into vertices sorted by angle, scaled so the farthest point is `size` (1 = circle).
 local function Outline(pts, size)
 	local verts, far = {}, 0
@@ -206,8 +231,9 @@ local SHAPES = {
 	star     = Outline(Star(5, 0.45), 1.30),
 	cross    = Outline(Cross(0.34), 1.15),
 	heart    = Outline(Heart(), 1.15),
+	penis    = Outline(Traced(Penis, 120), 1.20),
 }
-ns.SHAPE_NAMES = { "circle", "square", "diamond", "triangle", "hexagon", "octagon", "star", "cross", "heart" }
+ns.SHAPE_NAMES = { "circle", "square", "diamond", "triangle", "hexagon", "octagon", "star", "cross", "heart", "penis" }
 
 -- Distance from the centre to the shape's outline at angle theta (1 = circle).
 local function ShapeRadius(shape, theta)
@@ -578,6 +604,17 @@ local function Debug()
 	local raw = UnitPower("player", MANA)
 	local secret = issecretvalue and issecretvalue(raw)
 	ns.Print("debug:")
+	local hx, hy = holder:GetCenter()
+	local shownLines = 0
+	for i = 1, SEGMENTS do
+		if highlight.lines[i]:IsShown() then shownLines = shownLines + 1 end
+	end
+	local c = ns.settings.colors.highlight
+	print("  enabled:", tostring(ns.settings.enabled), " frame visible:", tostring(holder:IsVisible()),
+		" at:", hx and string.format("%.0f, %.0f", hx, hy) or "nowhere")
+	print("  highlight ring:", shownLines .. "/" .. SEGMENTS .. " pieces shown,",
+		"size", ns.settings.size, "thickness", ns.settings.thickness, "opacity", ns.settings.alpha,
+		string.format("color %.2f %.2f %.2f", c.r, c.g, c.b))
 	print("  class:", playerClass, " mode:", ns.settings.mode, " shows:", table.concat(ns.Priority(), " > "))
 	print("  mana now:", secret and "(hidden by the game)" or tostring(raw), " last seen:", tostring(lastMana))
 	print("  swing detection:", hitsVisible and "from hits on your target" or "estimated (hit details hidden)")
