@@ -88,13 +88,62 @@ local function StartTimer(kind, duration)
 end
 ns.StartTimer = StartTimer
 
-local function MeleeSpeed()
-	return Safe((UnitAttackSpeed("player"))) or 2
+-- Weapon speed. This client can hide it from addons in combat, so we also remember the last
+-- real value and learn the true gap between your swings or shots as they happen.
+local speeds = {
+	melee  = { read = function() return Safe((UnitAttackSpeed("player"))) end },
+	ranged = { read = function() return Safe((UnitRangedDamage("player"))) end },
+}
+ns.speeds = speeds
+
+-- Ranged shots are reported exactly, so their measured gap is the most reliable speed.
+-- Melee swings are spotted from hits on the target, so the game's own number comes first.
+local function Speed(kind)
+	local s = speeds[kind]
+	local live = s.read()
+	if live and live > 0 then s.remembered = live end
+	if kind == "ranged" and s.measured then
+		s.source = "measured"
+		return s.measured
+	end
+	if live and live > 0 then
+		s.source = "game"
+		return live
+	end
+	if s.measured then
+		s.source = "measured"
+		return s.measured
+	end
+	if s.remembered then
+		s.source = "remembered"
+		return s.remembered
+	end
+	s.source = "guess"
+	return 2
 end
 
-local function RangedSpeed()
-	return Safe((UnitRangedDamage("player"))) or 2
+-- Note a real swing or shot. Two in a row a sensible gap apart tell us the true speed.
+local function Observe(kind)
+	local s = speeds[kind]
+	local now = GetTime()
+	if s.last then
+		local gap = now - s.last
+		local ref = s.measured or s.remembered or 2
+		if gap > 0.5 and gap < 6 and gap > ref * 0.4 and gap < ref * 1.6 then
+			if not s.measured then
+				s.measured = gap
+			elseif gap < s.measured then
+				s.measured = s.measured * 0.3 + gap * 0.7 -- delays only make gaps longer, so trust short ones more
+			else
+				s.measured = s.measured * 0.8 + gap * 0.2
+			end
+		end
+	end
+	s.last = now
 end
+
+local function MeleeSpeed() return Speed("melee") end
+local function RangedSpeed() return Speed("ranged") end
 
 -------------------------------------------------------------------------------
 -- What to show
@@ -610,6 +659,7 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		local spellID = Safe((select(3, ...)))
 		if not spellID then return end
 		if RANGED_SPELLS[spellID] then
+			Observe("ranged")
 			StartTimer("ranged", RangedSpeed())
 		end
 		local spends = SpendsMana(spellID)
@@ -646,6 +696,7 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		local t = timers.melee
 		local left = t.start + t.duration - GetTime()
 		if left <= t.duration * SWING_WINDOW then
+			Observe("melee")
 			lastMeleeSpeed = MeleeSpeed()
 			StartTimer("melee", lastMeleeSpeed)
 		end
@@ -718,8 +769,15 @@ local function Debug()
 	print("  last spell:", tostring(ns.lastCast.id), " spent mana:", tostring(ns.lastCast.spends),
 		" cost info:", not costOk and "n/a" or (cost == nil and "hidden by the game" or tostring(cost)))
 	print("  swing detection:", hitsVisible and "from hits on your target" or "estimated (hit details hidden)")
-	print("  auto-attacking:", tostring(autoAttacking), " melee speed:", tostring(MeleeSpeed()),
-		" ranged speed:", tostring(RangedSpeed()))
+	print("  auto-attacking:", tostring(autoAttacking))
+	for _, k in ipairs({ "melee", "ranged" }) do
+		local s = speeds[k]
+		local used = Speed(k)
+		local live = s.read()
+		print(string.format("  %s speed: %.2fs (from %s)  game says: %s  measured: %s", k, used, s.source,
+			live and string.format("%.2f", live) or "hidden",
+			s.measured and string.format("%.2f", s.measured) or "-"))
+	end
 	local now = GetTime()
 	for _, k in ipairs({ "melee", "ranged", "mana" }) do
 		local t = timers[k]
