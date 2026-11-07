@@ -111,6 +111,11 @@ local function Speed(kind)
 		s.source = "game"
 		return live
 	end
+	-- In a group, melee gaps may include other people's hits, so trust the last real number first.
+	if kind == "melee" and s.remembered and ns.InGroup() then
+		s.source = "remembered"
+		return s.remembered
+	end
 	if s.measured then
 		s.source = "measured"
 		return s.measured
@@ -160,7 +165,13 @@ local MANA = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
 -- hit feedback (the same event that drives the numbers on the target portrait).
 local hitsVisible = true -- false if the game hides those details; then we estimate instead
 local SWING_RESULTS = { WOUND = true, MISS = true, DODGE = true, PARRY = true, BLOCK = true, DEFLECT = true, ABSORB = true }
-local SWING_WINDOW = 0.25 -- a hit counts as your swing only in the last 25% of the timer, or after it
+local SWING_WINDOW = 0.25 -- solo: a hit counts as your swing only in the last 25% of the timer, or after it
+local GROUP_WINDOW = 0.08 -- grouped: only in the last 8% of the timer...
+local GROUP_LATE = 0.35   -- ...or up to 0.35s after your swing was due
+
+function ns.InGroup()
+	return (IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup()) or false
+end
 
 local PRIORITY = {
 	HUNTER  = { "ranged", "melee", "mana" },
@@ -864,8 +875,21 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		end
 		local t = timers.melee
 		local left = t.start + t.duration - GetTime()
-		if left <= t.duration * SWING_WINDOW then
-			Observe("melee")
+		local mine
+		if t.duration <= 0 then
+			mine = true -- first swing since logging in
+		elseif ns.InGroup() then
+			-- Groupmates hit your target too and the game doesn't say who hit. Only take a hit
+			-- right around when your swing is due. If you've missed several swings (out of
+			-- range, say), take the next hit to get back in step.
+			mine = (left <= t.duration * GROUP_WINDOW and left >= -GROUP_LATE) or left < -t.duration
+		else
+			mine = left <= t.duration * SWING_WINDOW
+		end
+		if mine then
+			if not ns.InGroup() then
+				Observe("melee") -- in a group, the gaps between hits could be other people's
+			end
 			lastMeleeSpeed = MeleeSpeed()
 			StartTimer("melee", lastMeleeSpeed)
 		end
@@ -947,7 +971,8 @@ local function Debug()
 	if ns.lastCast.id then costOk, cost = pcall(CostsMana, ns.lastCast.id) end
 	print("  last spell:", tostring(ns.lastCast.id), " spent mana:", tostring(ns.lastCast.spends),
 		" cost info:", not costOk and "n/a" or (cost == nil and "hidden by the game" or tostring(cost)))
-	print("  swing detection:", hitsVisible and "from hits on your target" or "estimated (hit details hidden)")
+	print("  swing detection:", hitsVisible and "from hits on your target" or "estimated (hit details hidden)",
+		ns.InGroup() and "- grouped: strict timing, not learning speed" or "- solo")
 	print("  auto-attacking:", tostring(autoAttacking))
 	for _, k in ipairs({ "melee", "ranged" }) do
 		local s = speeds[k]

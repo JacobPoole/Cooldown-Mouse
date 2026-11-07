@@ -60,7 +60,8 @@ The folder must be named `Cooldown-Mouse` to match `Cooldown-Mouse.toc`.
 
 ## Notes
 
-- WoW Forever keeps the combat log to the Blizzard UI, so the addon can't see your swings directly. Instead it watches hits and misses on your target (the numbers on the target portrait). A physical hit counts as your swing only if you're auto-attacking and your next swing is due (in the last quarter of the timer, or after it). So a groupmate's hits and your own attacks mid-swing don't reset it. In a group, another player's hit can still be mistaken for your swing while yours is due.
+- WoW Forever keeps the combat log to the Blizzard UI, so the addon can't see your swings directly. Instead it watches hits and misses on your target (the numbers on the target portrait). A physical hit counts as your swing only if you're auto-attacking and your next swing is due (in the last quarter of the timer, or after it). So a groupmate's hits and your own attacks mid-swing don't reset it.
+- In a group or raid it's stricter, because the game doesn't say who landed a hit. A hit only counts if it lands in the last 8% of your swing or up to 0.35 seconds after it was due. If you've missed a few swings (out of range, say), the next hit gets you back in step. It also stops learning your swing speed from hits and uses the last speed the game showed instead. A groupmate's hit landing at almost the same moment as your swing can still be mistaken for yours. `/mouse debug` shows whether group mode is on.
 - If the game hides those hit details too, the melee ring falls back to an estimate: it starts when you begin auto-attacking and repeats every weapon-speed seconds. `/mouse debug` shows which method is in use.
 - Only the main hand is tracked when dual-wielding.
 - The mana timer starts whenever your mana goes down or you cast a spell that costs mana, so effects that drain your mana also start it.
