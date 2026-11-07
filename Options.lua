@@ -130,16 +130,24 @@ local function Register()
 	local lengthInit = Slider("penisLength", "How long are you?",
 		"Stretches the shaft from the balls to the tip. The thickness stays the same.", 1, 36, 0.5,
 		function(v) return string.format('%.1f"', v) end)
-	-- Only show "How long are you?" while the penis shape is picked.
-	local function IsPenis() return ns.settings.shape == "penis" end
-	if lengthInit then
-		if lengthInit.SetParentInitializer and shapeInit then
-			lengthInit:SetParentInitializer(shapeInit, IsPenis)
+	local CUPS = {}
+	for _, c in ipairs(ns.CUPS) do CUPS[#CUPS + 1] = { c, c .. " cup" } end
+	local cupInit = Dropdown("boobCup", "Cup size",
+		"How big the boobs are, from A to G. Bigger cups are fuller and hang a little lower.", CUPS)
+
+	-- Show a setting only while its shape is picked.
+	local function OnlyFor(init, shape)
+		if not init then return end
+		local function Picked() return ns.settings.shape == shape end
+		if init.SetParentInitializer and shapeInit then
+			init:SetParentInitializer(shapeInit, Picked)
 		end
-		if lengthInit.AddShownPredicate then
-			lengthInit:AddShownPredicate(IsPenis)
+		if init.AddShownPredicate then
+			init:AddShownPredicate(Picked)
 		end
 	end
+	OnlyFor(lengthInit, "penis")
+	OnlyFor(cupInit, "boobs")
 	Slider("size", "Size", "How wide the highlight ring is.", 8, 160, 1, num)
 	Slider("thickness", "Thickness", "How thick the highlight ring's line is.", 1, 10, 0.5,
 		function(v) return string.format("%.1f", v) end)

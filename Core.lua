@@ -14,6 +14,7 @@ ns.defaults = {
 	alpha = 0.35,
 	combatOnly = false,    -- only show the highlight ring in combat
 	penisLength = 6,       -- "How long are you?" (1-36); only stretches the shaft of the penis shape
+	boobCup = "C",         -- cup size A-G for the boobs shape
 	-- Timer ring
 	outerMode = "auto",    -- what the ring outside the highlight tracks: auto | melee | ranged | mana | none
 	innerMode = "none",    -- what the ring inside the highlight tracks (same choices)
@@ -267,8 +268,19 @@ end
 -- Boobs: each one is a hanging teardrop (a full round bottom that slopes gently up into the
 -- chest), side by side with a narrow cleavage; the cursor sits where they meet.
 -- `part` "left"/"right" gives just the outside edge of one boob, top to bottom, for its own timer.
-local BOOB = { cx = 0.44, cy = -0.12, r = 0.45, tx = 0.05, ty = 0.40 } -- right boob: bulb centre/radius, top tip
-local AREOLA = { x = 0.50, y = -0.24, r = 0.10 }
+ns.CUPS = { "A", "B", "C", "D", "E", "F", "G" }
+local CUP_INDEX = { A = 1, B = 2, C = 3, D = 4, E = 5, F = 6, G = 7 }
+
+-- Right boob for a cup size: bulb centre and radius, the tip where it joins the chest (which
+-- stays put), and the areola. Bigger cups are fuller, sit a little wider and hang a little lower.
+local function BoobShape(cup)
+	local r = 0.33 + 0.04 * (CUP_INDEX[cup] or 3)
+	local cx, cy = r * 0.95, 0.15 - 0.6 * r
+	return {
+		r = r, cx = cx, cy = cy, tx = 0.05, ty = 0.40,
+		areola = { x = cx + 0.13 * r, y = cy - 0.27 * r, r = 0.22 * r },
+	}
+end
 
 -- Inside one teardrop: the bulb circle, or the cone from the tip down to where it meets the bulb.
 local function InDrop(x, y, cx, cy, r, tx, ty)
@@ -282,32 +294,35 @@ local function InDrop(x, y, cx, cy, r, tx, ty)
 	return (px * dx + py * dy) / d <= (d * d - r * r) / d
 end
 
-local function InBoobs(x, y)
-	local b = BOOB
-	return InDrop(x, y, b.cx, b.cy, b.r, b.tx, b.ty) or InDrop(x, y, -b.cx, b.cy, b.r, -b.tx, b.ty)
-end
-
--- Outline points clockwise from 12 o'clock, found by walking in from outside at each angle.
--- The shape never changes, so it is traced once.
-local boobOutline
-local function BoobOutline()
-	if boobOutline then return boobOutline end
+-- Outline points clockwise from 12 o'clock, found by walking in from outside at each angle,
+-- measured from a point between the two bulbs (always inside). Traced once per cup size.
+local boobOutlines = {}
+local function BoobOutline(cup)
+	if boobOutlines[cup] then return boobOutlines[cup] end
+	local b = BoobShape(cup)
+	local function Inside(x, y)
+		return InDrop(x, y, b.cx, b.cy, b.r, b.tx, b.ty) or InDrop(x, y, -b.cx, b.cy, b.r, -b.tx, b.ty)
+	end
 	local pts, N = {}, 144
 	for k = 0, N - 1 do
 		local a = TAU * k / N
 		local sx, sy = math.sin(a), math.cos(a)
-		local r = 1.4
-		while r > 0.01 and not InBoobs(sx * r, sy * r) do
+		local r = 1.6
+		while r > 0.01 and not Inside(sx * r, b.cy + sy * r) do
 			r = r - 0.004
 		end
-		pts[k + 1] = { sx * r, sy * r }
+		pts[k + 1] = { sx * r, b.cy + sy * r }
 	end
-	boobOutline = pts
+	boobOutlines[cup] = pts
 	return pts
 end
 
+local function Cup()
+	return ns.settings and ns.settings.boobCup or "C"
+end
+
 local function BoobsPath(part)
-	local o = BoobOutline()
+	local o = BoobOutline(Cup())
 	local N = #o
 	local pts = {}
 	-- A boob's timer follows only its outer curve, not the cleavage or the crease underneath.
@@ -329,11 +344,13 @@ end
 
 -- The cleavage line and the areolas.
 local function BoobDetails()
-	local top = BoobOutline()[1][2]
+	local cup = Cup()
+	local top = BoobOutline(cup)[1][2]
+	local a = BoobShape(cup).areola
 	return {
 		{ line = { { 0, top }, { 0, top - 0.14 } } },
-		{ circle = { -AREOLA.x, AREOLA.y, AREOLA.r } },
-		{ circle = { AREOLA.x, AREOLA.y, AREOLA.r } },
+		{ circle = { -a.x, a.y, a.r } },
+		{ circle = { a.x, a.y, a.r } },
 	}
 end
 
@@ -955,6 +972,7 @@ local function Help()
 	print("  /mouse size <8-160> - highlight ring size (now " .. ns.settings.size .. ")")
 	print("  /mouse alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
 	print("  /mouse shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
+	print("  /mouse cup <A-G> - boobs shape cup size (now " .. ns.settings.boobCup .. ")")
 	print("  /mouse length <1-36> - penis shape length (now " .. ns.settings.penisLength .. ")")
 	print("  /mouse outer auto|melee|ranged|mana|none - what the outer ring tracks (now " .. ns.settings.outerMode .. ")")
 	print("  /mouse inner auto|melee|ranged|mana|none - what the inner ring tracks (now " .. ns.settings.innerMode .. ")")
@@ -987,6 +1005,10 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 	elseif cmd == "shape" then
 		if rest == "circle" or SHAPES[rest] then s.shape = rest end
 		ns.Print("Shape:", s.shape)
+	elseif cmd == "cup" then
+		local c = rest:upper()
+		if CUP_INDEX[c] then s.boobCup = c end
+		ns.Print("Cup size:", s.boobCup)
 	elseif cmd == "length" then
 		local n = tonumber(rest)
 		if n then s.penisLength = math.max(1, math.min(36, n)) end

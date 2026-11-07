@@ -25,7 +25,7 @@ This is what "Automatic" means. There are two timer rings, one just outside the 
 
 Options > AddOns > Cooldown Mouse, or type `/mouse`.
 
-- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis with a "How long are you?" length from 1 to 36, boobs with cleavage and areolas), size, thickness, opacity, color, only in combat.
+- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis with a "How long are you?" length from 1 to 36, boobs with cleavage, areolas and a cup size from A to G), size, thickness, opacity, color, only in combat.
 - **Timer rings:** what the outer ring and the inner ring each track, style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
 - **Test timer** and **Reset to defaults** buttons.
 
@@ -49,6 +49,7 @@ The folder must be named `Cooldown-Mouse` to match `Cooldown-Mouse.toc`.
 | `/mouse alpha <0-1>` | Highlight ring opacity |
 | `/mouse shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis or boobs |
 | `/mouse length <1-36>` | "How long are you?" for the penis shape (stretches the shaft only) |
+| `/mouse cup <A-G>` | Cup size for the boobs shape |
 | `/mouse outer auto\|melee\|ranged\|mana\|none` | What the outer ring tracks |
 | `/mouse inner auto\|melee\|ranged\|mana\|none` | What the inner ring tracks |
 | `/mouse color highlight\|melee\|ranged\|mana` | Pick a color |
