@@ -25,7 +25,7 @@ This is what "Automatic" means. There are two timer rings, one just outside the 
 
 Options > AddOns > Cooldown Mouse, or type `/mouse`.
 
-- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis with a "How long are you?" length from 1 to 36, boobs), size, thickness, opacity, color, only in combat.
+- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis with a "How long are you?" length from 1 to 36, boobs with cleavage and areolas), size, thickness, opacity, color, only in combat.
 - **Timer rings:** what the outer ring and the inner ring each track, style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
 - **Test timer** and **Reset to defaults** buttons.
 

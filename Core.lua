@@ -264,24 +264,77 @@ local function PenisPath(length)
 	return pts
 end
 
--- Boobs: two overlapping circles, cursor in the cleavage. `part` "left"/"right" gives just the
--- outside edge of one boob (from the top notch round to the bottom notch) for its own timer.
-local BOOB_X, BOOB_R = 0.48, 0.55
+-- Boobs: each one is a hanging teardrop (a full round bottom that slopes gently up into the
+-- chest), side by side with a narrow cleavage; the cursor sits where they meet.
+-- `part` "left"/"right" gives just the outside edge of one boob, top to bottom, for its own timer.
+local BOOB = { cx = 0.44, cy = -0.12, r = 0.45, tx = 0.05, ty = 0.40 } -- right boob: bulb centre/radius, top tip
+local AREOLA = { x = 0.50, y = -0.24, r = 0.10 }
+
+-- Inside one teardrop: the bulb circle, or the cone from the tip down to where it meets the bulb.
+local function InDrop(x, y, cx, cy, r, tx, ty)
+	if (x - cx) ^ 2 + (y - cy) ^ 2 <= r * r then return true end
+	local dx, dy = cx - tx, cy - ty
+	local d = math.sqrt(dx * dx + dy * dy)
+	local px, py = x - tx, y - ty
+	local pl = math.sqrt(px * px + py * py)
+	if pl == 0 then return true end
+	if (px * dx + py * dy) / (pl * d) < math.cos(math.asin(r / d)) then return false end
+	return (px * dx + py * dy) / d <= (d * d - r * r) / d
+end
+
+local function InBoobs(x, y)
+	local b = BOOB
+	return InDrop(x, y, b.cx, b.cy, b.r, b.tx, b.ty) or InDrop(x, y, -b.cx, b.cy, b.r, -b.tx, b.ty)
+end
+
+-- Outline points clockwise from 12 o'clock, found by walking in from outside at each angle.
+-- The shape never changes, so it is traced once.
+local boobOutline
+local function BoobOutline()
+	if boobOutline then return boobOutline end
+	local pts, N = {}, 144
+	for k = 0, N - 1 do
+		local a = TAU * k / N
+		local sx, sy = math.sin(a), math.cos(a)
+		local r = 1.4
+		while r > 0.01 and not InBoobs(sx * r, sy * r) do
+			r = r - 0.004
+		end
+		pts[k + 1] = { sx * r, sy * r }
+	end
+	boobOutline = pts
+	return pts
+end
+
 local function BoobsPath(part)
-	local notch = math.deg(math.atan2(math.sqrt(BOOB_R ^ 2 - BOOB_X ^ 2), BOOB_X))
+	local o = BoobOutline()
+	local N = #o
 	local pts = {}
-	if part == "left" then
-		Arc(pts, -BOOB_X, 0, BOOB_R, notch, 360 - notch) -- over the top, round the left side
-		pts.open, pts.ccw, pts.side = true, true, -1
-	elseif part == "right" then
-		Arc(pts, BOOB_X, 0, BOOB_R, 180 - notch, -180 + notch) -- over the top, round the right side
+	-- A boob's timer follows only its outer curve, not the cleavage or the crease underneath.
+	local function Keep(p)
+		if math.abs(p[1]) >= 0.14 then pts[#pts + 1] = p end
+	end
+	if part == "right" then
+		for k = 1, N / 2 + 1 do Keep(o[k]) end -- top, down the right side, to the bottom
 		pts.open, pts.side = true, 1
+	elseif part == "left" then
+		Keep(o[1])
+		for k = N, N / 2 + 1, -1 do Keep(o[k]) end -- top, down the left side, to the bottom
+		pts.open, pts.ccw, pts.side = true, true, -1
 	else
-		Arc(pts, BOOB_X, 0, BOOB_R, 180 - notch, -180 + notch)
-		Arc(pts, -BOOB_X, 0, BOOB_R, -notch, -360 + notch)
-		pts[#pts] = nil -- last point repeats the first
+		for k = 1, N do pts[k] = o[k] end
 	end
 	return pts
+end
+
+-- The cleavage line and the areolas.
+local function BoobDetails()
+	local top = BoobOutline()[1][2]
+	return {
+		{ line = { { 0, top }, { 0, top - 0.14 } } },
+		{ circle = { -AREOLA.x, AREOLA.y, AREOLA.r } },
+		{ circle = { AREOLA.x, AREOLA.y, AREOLA.r } },
+	}
 end
 
 -- Turn an outline into vertices sorted by angle, scaled so the farthest point is `size` (1 = circle).
@@ -309,13 +362,14 @@ local SHAPES = {
 	heart    = Outline(Heart(), 1.15),
 }
 -- Shapes drawn from an ordered outline. Unit outlines are scaled by ring radius * scale.
--- `dots` are small extra circles on the highlight ring (x, y, radius in the same units).
+-- `details` returns extra strokes drawn on the highlight ring: { line = {{x,y},...} } or
+-- { circle = {x, y, r} }, in the same units.
 local PATHS = {
 	penis = { scale = 1.5, build = function() return PenisPath(ns.settings.penisLength or 6) end },
 	boobs = {
-		scale = 1.0,
+		scale = 1.15,
 		build = BoobsPath,
-		dots = { { -BOOB_X, -0.05, 0.08 }, { BOOB_X, -0.05, 0.08 } },
+		details = BoobDetails,
 		paired = true, -- each boob gets its own timer on the outside
 	},
 }
@@ -469,22 +523,33 @@ local function LayoutRing(ring, radius, thickness, shape, clockwise, offset, par
 	ring.cut = nil
 end
 
--- Small hexagon dots drawn with the ring's spare lines (the boobs' nipples).
-local function AddDots(ring, dots, scale, thickness)
+-- Extra strokes (lines and small circles) drawn with the ring's spare lines.
+local function AddDetails(ring, details, scale, thickness)
 	local i = ring.n
-	for _, d in ipairs(dots) do
-		local x, y, r = d[1] * scale, d[2] * scale, math.max(2.5, d[3] * scale)
-		for k = 0, 5 do
-			local a1, a2 = TAU * k / 6, TAU * (k + 1) / 6
-			i = i + 1
-			local line = ring.lines[i]
-			if not line then return end
-			line:SetThickness(thickness)
-			line:SetStartPoint("CENTER", holder, x + math.sin(a1) * r, y + math.cos(a1) * r)
-			line:SetEndPoint("CENTER", holder, x + math.sin(a2) * r, y + math.cos(a2) * r)
-			ring.nx = i
+	local function Stroke(x1, y1, x2, y2)
+		local line = ring.lines[i + 1]
+		if not line then return end
+		i = i + 1
+		line:SetThickness(thickness)
+		line:SetStartPoint("CENTER", holder, x1 * scale, y1 * scale)
+		line:SetEndPoint("CENTER", holder, x2 * scale, y2 * scale)
+	end
+	for _, d in ipairs(details) do
+		if d.line then
+			for k = 2, #d.line do
+				Stroke(d.line[k - 1][1], d.line[k - 1][2], d.line[k][1], d.line[k][2])
+			end
+		elseif d.circle then
+			local x, y, r = d.circle[1], d.circle[2], d.circle[3]
+			-- Enough pieces to look round, but each long enough for the game to draw.
+			local pieces = math.max(5, math.min(12, math.floor(TAU * r * scale / MIN_PIECE)))
+			for k = 0, pieces - 1 do
+				local a1, a2 = TAU * k / pieces, TAU * (k + 1) / pieces
+				Stroke(x + math.sin(a1) * r, y + math.cos(a1) * r, x + math.sin(a2) * r, y + math.cos(a2) * r)
+			end
 		end
 	end
+	ring.nx = i
 end
 
 local function TintRing(ring, c, a)
@@ -531,7 +596,7 @@ local function SweepRing(ring, p)
 	ring.shown = true
 end
 
-local highlight = NewRing(1, 12) -- 12 spare lines for dots
+local highlight = NewRing(1, 30) -- 30 spare lines for details
 -- Two timer rings, one just outside the highlight ring and one just inside it.
 local timerRings = {
 	{ key = "outerMode", ring = NewRing(2), sign = 1 },
@@ -544,8 +609,8 @@ function ns.Apply()
 	local half = s.size / 2
 	local path = PATHS[s.shape]
 	LayoutRing(highlight, half, s.thickness, s.shape, s.direction ~= "ccw")
-	if path and path.dots then
-		AddDots(highlight, path.dots, half * path.scale, s.thickness)
+	if path and path.details then
+		AddDetails(highlight, path.details(), half * path.scale, s.thickness)
 	end
 
 	-- Normally the outer tracker rings the outside and the inner tracker the inside. With a
