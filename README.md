@@ -19,13 +19,13 @@ A cursor highlight and swing timer for **World of Warcraft: Forever** (interface
 | Mage, Priest, Warlock | Mana rule, then wand. |
 | Druid, Shaman, Paladin | Melee while you're auto-attacking, otherwise the mana rule. |
 
-This is what "Automatic" means. There are two timer rings, one just outside the highlight ring and one just inside it, and each can track something different: Automatic, Melee, Ranged, Mana, or Off. By default the outer ring is Automatic and the inner ring is Off. Change them in settings or with `/mouse outer` and `/mouse inner`.
+This is what "Automatic" means. There are two timer rings, one just outside the highlight ring and one just inside it, and each can track something different: Automatic, Melee, Ranged, Mana, or Off. By default the outer ring is Automatic and the inner ring is Off. Change them in settings or with `/mouse outer` and `/mouse inner`. With the Boobs shape, each boob gets its own timer around its outside edge instead: the outer setting is the left boob and the inner setting is the right boob.
 
 ## Settings
 
 Options > AddOns > Cooldown Mouse, or type `/mouse`.
 
-- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart), size, thickness, opacity, color, only in combat.
+- **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis with a "How long are you?" length from 1 to 36, boobs), size, thickness, opacity, color, only in combat.
 - **Timer rings:** what the outer ring and the inner ring each track, style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
 - **Test timer** and **Reset to defaults** buttons.
 
@@ -47,7 +47,8 @@ The folder must be named `Cooldown-Mouse` to match `Cooldown-Mouse.toc`.
 | `/mouse on\|off\|toggle` | Turn the addon on or off |
 | `/mouse size <8-160>` | Highlight ring size |
 | `/mouse alpha <0-1>` | Highlight ring opacity |
-| `/mouse shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross or heart |
+| `/mouse shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross, heart, penis or boobs |
+| `/mouse length <1-36>` | "How long are you?" for the penis shape (stretches the shaft only) |
 | `/mouse outer auto\|melee\|ranged\|mana\|none` | What the outer ring tracks |
 | `/mouse inner auto\|melee\|ranged\|mana\|none` | What the inner ring tracks |
 | `/mouse color highlight\|melee\|ranged\|mana` | Pick a color |

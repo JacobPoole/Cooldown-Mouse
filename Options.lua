@@ -128,7 +128,7 @@ local function Register()
 	Header("Highlight ring")
 	local shapeInit = Dropdown("shape", "Shape", "Shape of both rings.", SHAPES)
 	local lengthInit = Slider("penisLength", "How long are you?",
-		"Stretches the shaft from the balls to the tip. The thickness stays the same.", 1, 12, 0.5,
+		"Stretches the shaft from the balls to the tip. The thickness stays the same.", 1, 36, 0.5,
 		function(v) return string.format('%.1f"', v) end)
 	-- Only show "How long are you?" while the penis shape is picked.
 	local function IsPenis() return ns.settings.shape == "penis" end
@@ -151,10 +151,10 @@ local function Register()
 	Header("Timer rings")
 	local AUTO_HELP = " Automatic: Hunters show ranged first, then melee. Warriors and Rogues show melee. Mages, Priests and Warlocks show the mana rule. Druids, Shamans and Paladins show melee while auto-attacking, otherwise the mana rule."
 	Dropdown("outerMode", "Outer ring tracks",
-		"What the ring just outside the highlight ring shows. It only appears while that timer is running." .. AUTO_HELP,
+		"What the ring just outside the highlight ring shows. It only appears while that timer is running. With the Boobs shape, this is the timer around the left boob." .. AUTO_HELP,
 		MODES)
 	Dropdown("innerMode", "Inner ring tracks",
-		"What the ring just inside the highlight ring shows. It only appears while that timer is running." .. AUTO_HELP,
+		"What the ring just inside the highlight ring shows. It only appears while that timer is running. With the Boobs shape, this is the timer around the right boob." .. AUTO_HELP,
 		MODES)
 	Dropdown("style", "Style",
 		"Eats itself: the ring disappears piece by piece until it's gone. Fades out: the whole ring fades away.", STYLES)

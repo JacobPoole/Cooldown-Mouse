@@ -13,7 +13,7 @@ ns.defaults = {
 	thickness = 2,
 	alpha = 0.35,
 	combatOnly = false,    -- only show the highlight ring in combat
-	penisLength = 6,       -- "How long are you?" (1-12); only stretches the shaft of the penis shape
+	penisLength = 6,       -- "How long are you?" (1-36); only stretches the shaft of the penis shape
 	-- Timer ring
 	outerMode = "auto",    -- what the ring outside the highlight tracks: auto | melee | ranged | mana | none
 	innerMode = "none",    -- what the ring inside the highlight tracks (same choices)
@@ -238,7 +238,7 @@ local function Heart()
 end
 
 -- Penis: an ordered outline (clockwise from the tip) instead of a distance per angle, so it
--- can curve in where the shaft meets the balls. `length` (1-12) only stretches the shaft.
+-- can curve in where the shaft meets the balls. `length` (1-36) only stretches the shaft.
 local function Arc(pts, cx, cy, r, from, to)
 	-- from/to in degrees, counter-clockwise from 3 o'clock; points every ~6 degrees
 	local steps = math.max(1, math.ceil(math.abs(to - from) / 6))
@@ -261,6 +261,26 @@ local function PenisPath(length)
 	Arc(pts, -bx, by, ball, -180 - cleft, 180 - join - 360)    -- round the left ball, back to the shaft
 	Arc(pts, 0, top, head, 180 + flare, 90)                    -- up the shaft, head, left half
 	pts[#pts] = nil -- last point repeats the first
+	return pts
+end
+
+-- Boobs: two overlapping circles, cursor in the cleavage. `part` "left"/"right" gives just the
+-- outside edge of one boob (from the top notch round to the bottom notch) for its own timer.
+local BOOB_X, BOOB_R = 0.48, 0.55
+local function BoobsPath(part)
+	local notch = math.deg(math.atan2(math.sqrt(BOOB_R ^ 2 - BOOB_X ^ 2), BOOB_X))
+	local pts = {}
+	if part == "left" then
+		Arc(pts, -BOOB_X, 0, BOOB_R, notch, 360 - notch) -- over the top, round the left side
+		pts.open, pts.ccw, pts.side = true, true, -1
+	elseif part == "right" then
+		Arc(pts, BOOB_X, 0, BOOB_R, 180 - notch, -180 + notch) -- over the top, round the right side
+		pts.open, pts.side = true, 1
+	else
+		Arc(pts, BOOB_X, 0, BOOB_R, 180 - notch, -180 + notch)
+		Arc(pts, -BOOB_X, 0, BOOB_R, -notch, -360 + notch)
+		pts[#pts] = nil -- last point repeats the first
+	end
 	return pts
 end
 
@@ -288,13 +308,19 @@ local SHAPES = {
 	cross    = Outline(Cross(0.34), 1.15),
 	heart    = Outline(Heart(), 1.15),
 }
--- Shapes drawn from an ordered outline. Unit outlines are scaled by ring radius * PATH_SCALE.
-local PATH_SCALE = 1.5
+-- Shapes drawn from an ordered outline. Unit outlines are scaled by ring radius * scale.
+-- `dots` are small extra circles on the highlight ring (x, y, radius in the same units).
 local PATHS = {
-	penis = function() return PenisPath(ns.settings.penisLength or 6) end,
+	penis = { scale = 1.5, build = function() return PenisPath(ns.settings.penisLength or 6) end },
+	boobs = {
+		scale = 1.0,
+		build = BoobsPath,
+		dots = { { -BOOB_X, -0.05, 0.08 }, { BOOB_X, -0.05, 0.08 } },
+		paired = true, -- each boob gets its own timer on the outside
+	},
 }
 
-ns.SHAPE_NAMES = { "circle", "square", "diamond", "triangle", "hexagon", "octagon", "star", "cross", "heart", "penis" }
+ns.SHAPE_NAMES = { "circle", "square", "diamond", "triangle", "hexagon", "octagon", "star", "cross", "heart", "penis", "boobs" }
 
 -- Distance from the centre to the shape's outline at angle theta (1 = circle).
 local function ShapeRadius(shape, theta)
@@ -323,9 +349,9 @@ holder:SetFrameLevel(100)
 holder:EnableMouse(false)
 holder:SetSize(1, 1)
 
-local function NewRing(sublevel)
-	local ring = { lines = {}, pts = {}, n = SEGMENTS, shown = true }
-	for i = 1, SEGMENTS do
+local function NewRing(sublevel, extra)
+	local ring = { lines = {}, pts = {}, n = SEGMENTS, nx = SEGMENTS, shown = true }
+	for i = 1, SEGMENTS + (extra or 0) do
 		local line = holder:CreateLine(nil, "OVERLAY", nil, sublevel)
 		line:SetColorTexture(1, 1, 1, 1)
 		ring.lines[i] = line
@@ -352,34 +378,56 @@ end
 
 -- Fill pts[0..n] for a path shape: scale it, push it out (or in) by `offset` along the outline's
 -- normals, then space n points evenly along it, starting at the top. Returns n.
-local function PathPoints(out, shape, radius, offset, clockwise)
-	local dense = PATHS[shape]()
-	local k = radius * PATH_SCALE
+local function PathPoints(out, shape, radius, offset, clockwise, part)
+	local def = PATHS[shape]
+	local dense = def.build(part)
+	local k = radius * def.scale
 	local m = #dense
+	local open = dense.open -- an open path (one boob's edge) doesn't join back to its start
+	local turn = dense.ccw and -1 or 1
 	local pts = {}
 	for i = 1, m do
-		local prev, nxt = dense[(i - 2) % m + 1], dense[i % m + 1]
+		local prev, nxt
+		if open then
+			prev, nxt = dense[math.max(1, i - 1)], dense[math.min(m, i + 1)]
+		else
+			prev, nxt = dense[(i - 2) % m + 1], dense[i % m + 1]
+		end
 		local tx, ty = nxt[1] - prev[1], nxt[2] - prev[2]
 		local len = math.sqrt(tx * tx + ty * ty)
 		if len == 0 then len = 1 end
-		local nx, ny = -ty / len, tx / len -- outward, since the outline runs clockwise
+		local nx, ny = -ty / len * turn, tx / len * turn -- outward
 		pts[i] = { dense[i][1] * k + nx * offset, dense[i][2] * k + ny * offset }
 	end
-	pts[m + 1] = pts[1]
+	-- One boob's timer stops at the middle so it doesn't cross into the cleavage.
+	if dense.side then
+		local kept = {}
+		for _, pt in ipairs(pts) do
+			if pt[1] * dense.side >= 0 then kept[#kept + 1] = pt end
+		end
+		if #kept >= 2 then
+			pts, m = kept, #kept
+		end
+	end
+	local last = m
+	if not open then
+		pts[m + 1] = pts[1]
+		last = m + 1
+	end
 
 	local dist = { [1] = 0 }
-	for i = 2, m + 1 do
+	for i = 2, last do
 		dist[i] = dist[i - 1] + math.sqrt((pts[i][1] - pts[i - 1][1]) ^ 2 + (pts[i][2] - pts[i - 1][2]) ^ 2)
 	end
-	local total = dist[m + 1]
-	local n = math.max(24, math.min(SEGMENTS, math.floor(total / MIN_PIECE)))
+	local total = dist[last]
+	local n = math.max(12, math.min(SEGMENTS, math.floor(total / MIN_PIECE)))
 
 	local j = 2
 	for i = 0, n do
 		local s = total * i / n
 		if not clockwise then s = total - s end
 		if s <= 0 then j = 2 elseif s < dist[j - 1] then j = 2 end
-		while j < m + 1 and dist[j] < s do j = j + 1 end
+		while j < last and dist[j] < s do j = j + 1 end
 		local a, b = pts[j - 1], pts[j]
 		local seg = dist[j] - dist[j - 1]
 		local f = seg > 0 and (s - dist[j - 1]) / seg or 0
@@ -390,11 +438,11 @@ local function PathPoints(out, shape, radius, offset, clockwise)
 	return n
 end
 
-local function LayoutRing(ring, radius, thickness, shape, clockwise, offset)
+local function LayoutRing(ring, radius, thickness, shape, clockwise, offset, part)
 	offset = offset or 0
 	local n
 	if PATHS[shape] then
-		n = PathPoints(ring.pts, shape, radius, offset, clockwise)
+		n = PathPoints(ring.pts, shape, radius, offset, clockwise, part)
 	else
 		radius = math.max(2, radius + offset)
 		local dir = clockwise and 1 or -1
@@ -414,14 +462,33 @@ local function LayoutRing(ring, radius, thickness, shape, clockwise, offset)
 		line:SetStartPoint("CENTER", holder, a.x, a.y)
 		line:SetEndPoint("CENTER", holder, b.x, b.y)
 	end
-	for i = n + 1, SEGMENTS do
+	for i = n + 1, #ring.lines do
 		ring.lines[i]:Hide()
 	end
+	ring.nx = n
 	ring.cut = nil
 end
 
+-- Small hexagon dots drawn with the ring's spare lines (the boobs' nipples).
+local function AddDots(ring, dots, scale, thickness)
+	local i = ring.n
+	for _, d in ipairs(dots) do
+		local x, y, r = d[1] * scale, d[2] * scale, math.max(2.5, d[3] * scale)
+		for k = 0, 5 do
+			local a1, a2 = TAU * k / 6, TAU * (k + 1) / 6
+			i = i + 1
+			local line = ring.lines[i]
+			if not line then return end
+			line:SetThickness(thickness)
+			line:SetStartPoint("CENTER", holder, x + math.sin(a1) * r, y + math.cos(a1) * r)
+			line:SetEndPoint("CENTER", holder, x + math.sin(a2) * r, y + math.cos(a2) * r)
+			ring.nx = i
+		end
+	end
+end
+
 local function TintRing(ring, c, a)
-	for i = 1, ring.n do
+	for i = 1, ring.nx do
 		ring.lines[i]:SetVertexColor(c.r, c.g, c.b, a)
 	end
 end
@@ -438,7 +505,7 @@ end
 
 local function ShowRing(ring, shown)
 	RestoreCut(ring)
-	for i = 1, ring.n do
+	for i = 1, ring.nx do
 		ring.lines[i]:SetShown(shown)
 	end
 	ring.shown = shown
@@ -464,7 +531,7 @@ local function SweepRing(ring, p)
 	ring.shown = true
 end
 
-local highlight = NewRing(1)
+local highlight = NewRing(1, 12) -- 12 spare lines for dots
 -- Two timer rings, one just outside the highlight ring and one just inside it.
 local timerRings = {
 	{ key = "outerMode", ring = NewRing(2), sign = 1 },
@@ -475,11 +542,21 @@ local flashStart
 function ns.Apply()
 	local s = ns.settings
 	local half = s.size / 2
+	local path = PATHS[s.shape]
 	LayoutRing(highlight, half, s.thickness, s.shape, s.direction ~= "ccw")
+	if path and path.dots then
+		AddDots(highlight, path.dots, half * path.scale, s.thickness)
+	end
 
+	-- Normally the outer tracker rings the outside and the inner tracker the inside. With a
+	-- paired shape (boobs) each half gets its own timer on the outside instead:
+	-- the outer tracker on the left, the inner tracker on the right.
+	local paired = path and path.paired
 	local offset = s.gap + (s.thickness + s.timerThickness) / 2
 	for _, tr in ipairs(timerRings) do
-		LayoutRing(tr.ring, half, s.timerThickness, s.shape, s.direction ~= "ccw", offset * tr.sign)
+		local part = paired and (tr.sign == 1 and "left" or "right") or nil
+		LayoutRing(tr.ring, half, s.timerThickness, s.shape, s.direction ~= "ccw",
+			paired and offset or offset * tr.sign, part)
 		ShowRing(tr.ring, false)
 		tr.tinted = nil
 	end
@@ -813,7 +890,7 @@ local function Help()
 	print("  /mouse size <8-160> - highlight ring size (now " .. ns.settings.size .. ")")
 	print("  /mouse alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
 	print("  /mouse shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
-	print("  /mouse length <1-12> - penis shape length (now " .. ns.settings.penisLength .. ")")
+	print("  /mouse length <1-36> - penis shape length (now " .. ns.settings.penisLength .. ")")
 	print("  /mouse outer auto|melee|ranged|mana|none - what the outer ring tracks (now " .. ns.settings.outerMode .. ")")
 	print("  /mouse inner auto|melee|ranged|mana|none - what the inner ring tracks (now " .. ns.settings.innerMode .. ")")
 	print("  /mouse color highlight|melee|ranged|mana - pick a color")
@@ -847,7 +924,7 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 		ns.Print("Shape:", s.shape)
 	elseif cmd == "length" then
 		local n = tonumber(rest)
-		if n then s.penisLength = math.max(1, math.min(12, n)) end
+		if n then s.penisLength = math.max(1, math.min(36, n)) end
 		ns.Print("How long are you?", s.penisLength .. '"')
 	elseif cmd == "outer" or cmd == "mode" or cmd == "inner" then
 		local key = (cmd == "inner") and "innerMode" or "outerMode"
