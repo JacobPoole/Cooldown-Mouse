@@ -19,14 +19,14 @@ A cursor highlight and swing timer for **World of Warcraft: Forever** (interface
 | Mage, Priest, Warlock | Mana rule, then wand. |
 | Druid, Shaman, Paladin | Melee while you're auto-attacking, otherwise the mana rule. |
 
-Change this with "Tracks" in settings or `/mouse mode`.
+This is what "Automatic" means. There are two timer rings, one just outside the highlight ring and one just inside it, and each can track something different: Automatic, Melee, Ranged, Mana, or Off. By default the outer ring is Automatic and the inner ring is Off. Change them in settings or with `/mouse outer` and `/mouse inner`.
 
 ## Settings
 
 Options > AddOns > Cooldown Mouse, or type `/mouse`.
 
 - **Highlight ring:** shape (circle, square, diamond, triangle, hexagon, octagon, star, cross, heart), size, thickness, opacity, color, only in combat.
-- **Timer ring:** what it tracks, position (outside, inside, or on the highlight ring), style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
+- **Timer rings:** what the outer ring and the inner ring each track, style (eats itself or fades out), direction, gap, thickness, opacity, and a color for each of melee, ranged and mana. You can also turn the mana flash on or off.
 - **Test timer** and **Reset to defaults** buttons.
 
 ## Install
@@ -48,7 +48,8 @@ The folder must be named `Cooldown-Mouse` to match `Cooldown-Mouse.toc`.
 | `/mouse size <8-160>` | Highlight ring size |
 | `/mouse alpha <0-1>` | Highlight ring opacity |
 | `/mouse shape <name>` | circle, square, diamond, triangle, hexagon, octagon, star, cross or heart |
-| `/mouse mode auto\|melee\|ranged\|mana` | What the timer ring tracks |
+| `/mouse outer auto\|melee\|ranged\|mana\|none` | What the outer ring tracks |
+| `/mouse inner auto\|melee\|ranged\|mana\|none` | What the inner ring tracks |
 | `/mouse color highlight\|melee\|ranged\|mana` | Pick a color |
 | `/mouse test` | Run a 3 second test timer |
 | `/mouse debug` | Show what the addon sees (class, mana, timers) |

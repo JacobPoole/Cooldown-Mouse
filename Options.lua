@@ -13,11 +13,7 @@ local MODES = {
 	{ "melee", "Melee swing" },
 	{ "ranged", "Ranged / Auto Shot" },
 	{ "mana", "Mana regen (5 second rule)" },
-}
-local PLACEMENTS = {
-	{ "outside", "Outside the highlight ring" },
-	{ "inside", "Inside the highlight ring" },
-	{ "replace", "On the highlight ring (replaces it)" },
+	{ "none", "Off" },
 }
 local STYLES = {
 	{ "sweep", "Eats itself (sweep)" },
@@ -150,21 +146,23 @@ local function Register()
 	Slider("alpha", "Opacity", "How solid the highlight ring is. Lower is more see-through.", 0, 1, 0.05, pct)
 	ColorButton("highlight", "Color of the ring that always follows your cursor.")
 	Checkbox("combatOnly", "Only in combat",
-		"Hide the highlight ring out of combat. The timer ring still shows whenever a timer runs.")
+		"Hide the highlight ring out of combat. The timer rings still show whenever a timer runs.")
 
-	Header("Timer ring")
-	Dropdown("mode", "Tracks",
-		"Automatic: Hunters show ranged first, then melee. Warriors and Rogues show melee. Mages, Priests and Warlocks show the mana rule. Druids, Shamans and Paladins show melee while auto-attacking, otherwise the mana rule.",
+	Header("Timer rings")
+	local AUTO_HELP = " Automatic: Hunters show ranged first, then melee. Warriors and Rogues show melee. Mages, Priests and Warlocks show the mana rule. Druids, Shamans and Paladins show melee while auto-attacking, otherwise the mana rule."
+	Dropdown("outerMode", "Outer ring tracks",
+		"What the ring just outside the highlight ring shows. It only appears while that timer is running." .. AUTO_HELP,
 		MODES)
-	Dropdown("placement", "Position",
-		"Where the timer ring sits. It only appears while a timer is running.", PLACEMENTS)
+	Dropdown("innerMode", "Inner ring tracks",
+		"What the ring just inside the highlight ring shows. It only appears while that timer is running." .. AUTO_HELP,
+		MODES)
 	Dropdown("style", "Style",
 		"Eats itself: the ring disappears piece by piece until it's gone. Fades out: the whole ring fades away.", STYLES)
-	Dropdown("direction", "Direction", "Which way the ring eats itself, starting from the top.", DIRECTIONS)
-	Slider("gap", "Gap", "Space between the highlight ring and the timer ring.", 0, 20, 1, num)
-	Slider("timerThickness", "Thickness", "How thick the timer ring's line is.", 1, 10, 0.5,
+	Dropdown("direction", "Direction", "Which way the timer rings eat themselves, starting from the top.", DIRECTIONS)
+	Slider("gap", "Gap", "Space between the highlight ring and each timer ring.", 0, 20, 1, num)
+	Slider("timerThickness", "Thickness", "How thick the timer rings' lines are.", 1, 10, 0.5,
 		function(v) return string.format("%.1f", v) end)
-	Slider("timerAlpha", "Opacity", "How solid the timer ring is.", 0.1, 1, 0.05, pct)
+	Slider("timerAlpha", "Opacity", "How solid the timer rings are.", 0.1, 1, 0.05, pct)
 	ColorButton("melee", "Color of the timer ring for melee swings.")
 	ColorButton("ranged", "Color of the timer ring for Auto Shot and wands.")
 	ColorButton("mana", "Color of the timer ring for the mana rule, and of the flash when it ends.")
@@ -173,7 +171,8 @@ local function Register()
 
 	Header("Try it")
 	Button("Test timer", "Run", function()
-		local kind = ns.Priority()[1]
+		local s = ns.settings
+		local kind = ns.Priority(s.outerMode)[1] or ns.Priority(s.innerMode)[1] or "melee"
 		ns.StartTimer(kind, 3)
 	end, "Run a 3 second timer so you can see how the ring looks.")
 	Button("Defaults", "Reset", function()

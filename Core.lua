@@ -15,8 +15,8 @@ ns.defaults = {
 	combatOnly = false,    -- only show the highlight ring in combat
 	penisLength = 6,       -- "How long are you?" (1-12); only stretches the shaft of the penis shape
 	-- Timer ring
-	mode = "auto",         -- auto | melee | ranged | mana
-	placement = "outside", -- outside | inside | replace (timer ring takes over the highlight ring)
+	outerMode = "auto",    -- what the ring outside the highlight tracks: auto | melee | ranged | mana | none
+	innerMode = "none",    -- what the ring inside the highlight tracks (same choices)
 	gap = 3,               -- space between the two rings
 	timerThickness = 3,
 	timerAlpha = 0.9,
@@ -173,16 +173,20 @@ local HYBRID_MELEE = { "melee", "mana", "ranged" }
 local HYBRID_CAST  = { "mana", "melee", "ranged" }
 local SINGLE = { melee = { "melee" }, ranged = { "ranged" }, mana = { "mana" } }
 
-function ns.Priority()
-	local mode = ns.settings.mode
+local NONE = {}
+ns.MODES = { auto = true, melee = true, ranged = true, mana = true, none = true }
+
+-- What a ring set to `mode` shows, most important first.
+function ns.Priority(mode)
+	if mode == "none" then return NONE end
 	if SINGLE[mode] then return SINGLE[mode] end
 	if PRIORITY[playerClass] then return PRIORITY[playerClass] end
 	-- Druid, Shaman, Paladin: the swing timer while you're auto-attacking, otherwise the mana rule.
 	return autoAttacking and HYBRID_MELEE or HYBRID_CAST
 end
 
-local function Choose()
-	local list = ns.Priority()
+local function Choose(mode)
+	local list = ns.Priority(mode)
 	for i = 1, #list do
 		if IsActive(list[i]) then return list[i] end
 	end
@@ -461,8 +465,12 @@ local function SweepRing(ring, p)
 end
 
 local highlight = NewRing(1)
-local timerRing = NewRing(2)
-local tintedKind, flashStart
+-- Two timer rings, one just outside the highlight ring and one just inside it.
+local timerRings = {
+	{ key = "outerMode", ring = NewRing(2), sign = 1 },
+	{ key = "innerMode", ring = NewRing(3), sign = -1 },
+}
+local flashStart
 
 function ns.Apply()
 	local s = ns.settings
@@ -470,16 +478,13 @@ function ns.Apply()
 	LayoutRing(highlight, half, s.thickness, s.shape, s.direction ~= "ccw")
 
 	local offset = s.gap + (s.thickness + s.timerThickness) / 2
-	if s.placement == "inside" then
-		offset = -offset
-	elseif s.placement ~= "outside" then
-		offset = 0
+	for _, tr in ipairs(timerRings) do
+		LayoutRing(tr.ring, half, s.timerThickness, s.shape, s.direction ~= "ccw", offset * tr.sign)
+		ShowRing(tr.ring, false)
+		tr.tinted = nil
 	end
-	LayoutRing(timerRing, half, s.timerThickness, s.shape, s.direction ~= "ccw", offset)
 
 	TintRing(highlight, s.colors.highlight, s.alpha)
-	tintedKind = nil
-	ShowRing(timerRing, false)
 	ShowRing(highlight, false)
 	holder:SetShown(s.enabled)
 end
@@ -554,7 +559,36 @@ end
 
 ns.Apply = Guard("settings", ns.Apply)
 
-local lastKind
+local function UpdateTimerRing(tr, s, now)
+	local ring = tr.ring
+	local kind = Choose(s[tr.key])
+
+	-- Mana regen just sped up?
+	if tr.last == "mana" and kind ~= "mana" and not IsActive("mana") and s.manaFlash then
+		flashStart = now
+	end
+	tr.last = kind
+
+	if kind then
+		local t = timers[kind]
+		local p = math.min(1, math.max(0, (now - t.start) / t.duration))
+		local c = s.colors[kind]
+		if s.style == "fade" then
+			if not ring.shown or ring.cut then ShowRing(ring, true) end
+			TintRing(ring, c, s.timerAlpha * (1 - p))
+			tr.tinted = nil
+		else
+			if tr.tinted ~= kind then
+				TintRing(ring, c, s.timerAlpha)
+				tr.tinted = kind
+			end
+			SweepRing(ring, p)
+		end
+	elseif ring.shown then
+		ShowRing(ring, false)
+	end
+end
+
 holder:SetScript("OnUpdate", Guard("OnUpdate", function()
 	local s = ns.settings
 	if not s then return end
@@ -581,38 +615,14 @@ holder:SetScript("OnUpdate", Guard("OnUpdate", function()
 		end
 	end
 
-	local kind = Choose()
-
-	-- Mana regen just sped up?
-	if lastKind == "mana" and kind ~= "mana" and not IsActive("mana") and s.manaFlash then
-		flashStart = now
-	end
-	lastKind = kind
-
-	-- Timer ring
-	if kind then
-		local t = timers[kind]
-		local p = math.min(1, math.max(0, (now - t.start) / t.duration))
-		local c = s.colors[kind]
-		if s.style == "fade" then
-			if not timerRing.shown or timerRing.cut then ShowRing(timerRing, true) end
-			TintRing(timerRing, c, s.timerAlpha * (1 - p))
-			tintedKind = nil
-		else
-			if tintedKind ~= kind then
-				TintRing(timerRing, c, s.timerAlpha)
-				tintedKind = kind
-			end
-			SweepRing(timerRing, p)
-		end
-	elseif timerRing.shown then
-		ShowRing(timerRing, false)
+	for _, tr in ipairs(timerRings) do
+		UpdateTimerRing(tr, s, now)
 	end
 
 	-- Highlight ring
 	local flashing = flashStart and now - flashStart < FLASH_TIME
 	local showHL = flashing
-		or ((not s.combatOnly or UnitAffectingCombat("player")) and not (kind and s.placement == "replace"))
+		or not s.combatOnly or UnitAffectingCombat("player")
 	if showHL ~= highlight.shown then
 		ShowRing(highlight, showHL)
 	end
@@ -716,6 +726,15 @@ events:SetScript("OnEvent", Guard("events", function(_, event, ...)
 		local db = CooldownMouseDB or {}
 		-- Settings from earlier versions that no longer exist.
 		db.color, db.spark = nil, nil
+		if db.mode or db.placement then
+			-- One timer ring became two (outer and inner).
+			if db.placement == "inside" then
+				db.innerMode, db.outerMode = db.mode or "auto", "none"
+			else
+				db.outerMode = db.mode or "auto"
+			end
+			db.mode, db.placement = nil, nil
+		end
 		if db.size == 48 then db.size = nil end
 		if db.alpha == 0.6 then db.alpha = nil end
 		CooldownMouseDB = ns.CopyDefaults(db, ns.defaults)
@@ -762,7 +781,8 @@ local function Debug()
 	print("  highlight ring:", shownLines .. "/" .. highlight.n .. " pieces shown,",
 		"size", ns.settings.size, "thickness", ns.settings.thickness, "opacity", ns.settings.alpha,
 		string.format("color %.2f %.2f %.2f", c.r, c.g, c.b))
-	print("  class:", playerClass, " mode:", ns.settings.mode, " shows:", table.concat(ns.Priority(), " > "))
+	print("  class:", playerClass, " outer ring:", ns.settings.outerMode, "(" .. table.concat(ns.Priority(ns.settings.outerMode), " > ") .. ")",
+		" inner ring:", ns.settings.innerMode, "(" .. table.concat(ns.Priority(ns.settings.innerMode), " > ") .. ")")
 	print("  mana now:", secret and "(hidden by the game)" or tostring(raw), " last seen:", tostring(lastMana))
 	local costOk, cost = false, nil
 	if ns.lastCast.id then costOk, cost = pcall(CostsMana, ns.lastCast.id) end
@@ -794,7 +814,8 @@ local function Help()
 	print("  /mouse alpha <0-1> - highlight ring opacity (now " .. ns.settings.alpha .. ")")
 	print("  /mouse shape " .. table.concat(ns.SHAPE_NAMES, "|") .. " (now " .. ns.settings.shape .. ")")
 	print("  /mouse length <1-12> - penis shape length (now " .. ns.settings.penisLength .. ")")
-	print("  /mouse mode auto|melee|ranged|mana - what the timer ring tracks (now " .. ns.settings.mode .. ")")
+	print("  /mouse outer auto|melee|ranged|mana|none - what the outer ring tracks (now " .. ns.settings.outerMode .. ")")
+	print("  /mouse inner auto|melee|ranged|mana|none - what the inner ring tracks (now " .. ns.settings.innerMode .. ")")
 	print("  /mouse color highlight|melee|ranged|mana - pick a color")
 	print("  /mouse test - run a 3 second test timer")
 	print("  /mouse debug - show what the addon sees")
@@ -828,9 +849,11 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 		local n = tonumber(rest)
 		if n then s.penisLength = math.max(1, math.min(12, n)) end
 		ns.Print("How long are you?", s.penisLength .. '"')
-	elseif cmd == "mode" then
-		if rest == "auto" or SINGLE[rest] then s.mode = rest end
-		ns.Print("Mode:", s.mode)
+	elseif cmd == "outer" or cmd == "mode" or cmd == "inner" then
+		local key = (cmd == "inner") and "innerMode" or "outerMode"
+		if rest == "off" then rest = "none" end
+		if ns.MODES[rest] then s[key] = rest end
+		ns.Print((key == "innerMode" and "Inner" or "Outer") .. " ring tracks:", s[key])
 	elseif cmd == "color" or cmd == "colour" then
 		if s.colors[rest] and ns.PickColor then
 			ns.PickColor(rest)
@@ -839,7 +862,7 @@ SlashCmdList.COOLDOWNMOUSE = function(msg)
 		end
 		return
 	elseif cmd == "test" then
-		local kind = ns.Priority()[1]
+		local kind = ns.Priority(s.outerMode)[1] or ns.Priority(s.innerMode)[1] or "melee"
 		StartTimer(kind, 3)
 		ns.Print("Testing the " .. kind .. " ring.")
 		return
